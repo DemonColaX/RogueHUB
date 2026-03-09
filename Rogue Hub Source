@@ -1,334 +1,316 @@
+-- Rogue Utility Hub
+
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
-local camera = Workspace.CurrentCamera
 local mouse = player:GetMouse()
 
--- states
+local char = player.Character or player.CharacterAdded:Wait()
+
+player.CharacterAdded:Connect(function(c)
+	char = c
+end)
+
+-- STATES
+
 local flying=false
 local noclip=false
-local playerESP=false
-local npcESP=false
-local itemESP=false
-local artifactESP=false
-local trinketESP=false
-local autoClimb=false
-
-local speed=90
-local walkSpeedValue=16
-
-local spectating=false
 local spectateTarget=nil
-
 local attachBack=false
-local attachTarget=nil
-
-local bv
-local bg
-local espObjects={}
-
-local function getChar()
-	return player.Character or player.CharacterAdded:Wait()
-end
+local flySpeed=80
 
 -- GUI
+
 local gui=Instance.new("ScreenGui",game.CoreGui)
+gui.Name="RogueHub"
 
 local frame=Instance.new("Frame",gui)
-frame.Size=UDim2.new(0,260,0,560)
-frame.Position=UDim2.new(0,50,0,200)
-frame.BackgroundColor3=Color3.fromRGB(30,30,30)
-frame.Active=true
-frame.Draggable=true
+frame.Size=UDim2.new(0,260,0,420)
+frame.Position=UDim2.new(0,20,0.5,-200)
+frame.BackgroundColor3=Color3.fromRGB(25,25,25)
 
 local title=Instance.new("TextLabel",frame)
 title.Size=UDim2.new(1,0,0,30)
 title.Text="Rogue Utility Hub"
-title.TextColor3=Color3.new(1,1,1)
 title.BackgroundTransparency=1
+title.TextColor3=Color3.new(1,1,1)
 
--- button creator
-local function makeButton(text,y,callback)
-	local b=Instance.new("TextButton")
-	b.Parent=frame
+-- BUTTON CREATOR
+
+local y=40
+
+function makeButton(text,callback)
+
+	local b=Instance.new("TextButton",frame)
 	b.Size=UDim2.new(1,-10,0,30)
 	b.Position=UDim2.new(0,5,0,y)
 	b.Text=text
-	b.BackgroundColor3=Color3.fromRGB(50,50,50)
+	b.BackgroundColor3=Color3.fromRGB(40,40,40)
 	b.TextColor3=Color3.new(1,1,1)
+
 	b.MouseButton1Click:Connect(callback)
+
+	y=y+35
+
 end
 
--- teleport
-local function teleportMouse()
-	local char=getChar()
+-- TELEPORT
+
+local function teleportToMouse()
+
+	if not char then return end
+
 	local root=char:FindFirstChild("HumanoidRootPart")
-	if root then
-		root.CFrame=CFrame.new(mouse.Hit.Position+Vector3.new(0,5,0))
-	end
+	if not root then return end
+
+	local pos=mouse.Hit.Position
+
+	root.CFrame=CFrame.new(pos+Vector3.new(0,5,0))
+
 end
 
--- ESP
-local function createESP(obj,name,color)
-	if espObjects[obj] then return end
-	local billboard=Instance.new("BillboardGui")
-	billboard.Size=UDim2.new(0,100,0,40)
-	billboard.AlwaysOnTop=true
-	local text=Instance.new("TextLabel",billboard)
-	text.Size=UDim2.new(1,0,1,0)
-	text.BackgroundTransparency=1
-	text.TextColor3=color
-	text.Text=name
-	billboard.Parent=obj
-	espObjects[obj]=billboard
-end
+-- FLY
 
-local function clearESP()
-	for _,v in pairs(espObjects) do
-		pcall(function() v:Destroy() end)
-	end
-	espObjects={}
-end
+local bv
+local bg
 
--- buttons
-makeButton("Fly (Z)",40,function() flying=not flying end)
-makeButton("NoClip (X)",80,function() noclip=not noclip end)
-makeButton("Teleport Mouse (T)",120,teleportMouse)
-makeButton("Player ESP (E)",160,function() playerESP=not playerESP end)
-makeButton("NPC ESP (R)",200,function() npcESP=not npcESP end)
-makeButton("Item ESP (Y)",240,function() itemESP=not itemESP end)
-makeButton("Auto Climb (C)",280,function() autoClimb=not autoClimb end)
-makeButton("Fly Speed +",320,function() speed+=20 end)
-makeButton("Fly Speed -",350,function() speed=math.max(20,speed-20) end)
+function startFly()
 
-makeButton("WalkSpeed + (V)",380,function()
-	local char=getChar()
-	local hum=char:FindFirstChildOfClass("Humanoid")
-	if hum then
-		walkSpeedValue+=5
-		hum.WalkSpeed=walkSpeedValue
-	end
-end)
-
-makeButton("Reset WalkSpeed (B)",410,function()
-	local char=getChar()
-	local hum=char:FindFirstChildOfClass("Humanoid")
-	if hum then
-		walkSpeedValue=16
-		hum.WalkSpeed=16
-	end
-end)
-
-makeButton("Artifact ESP (U)",440,function() artifactESP=not artifactESP end)
-makeButton("Trinket ESP (I)",470,function() trinketESP=not trinketESP end)
-makeButton("Attach To Back (P)",500,function()
-	if attachBack then
-		attachBack=false
-		attachTarget=nil
-	else
-		if spectateTarget and spectateTarget.Character then
-			attachTarget=spectateTarget
-			attachBack=true
-		end
-	end
-end)
-
--- spectate dropdown
-local spectateOpen=false
-local spectateButtons={}
-
-local spectateButton=Instance.new("TextButton")
-spectateButton.Parent=frame
-spectateButton.Size=UDim2.new(1,-10,0,30)
-spectateButton.Position=UDim2.new(0,5,0,530)
-spectateButton.Text="Spectate Players ▼"
-spectateButton.BackgroundColor3=Color3.fromRGB(50,50,50)
-spectateButton.TextColor3=Color3.new(1,1,1)
-
-local function stopSpectate()
-	spectating=false
-	spectateTarget=nil
-	local char=player.Character
-	if char and char:FindFirstChild("Humanoid") then
-		camera.CameraSubject=char:FindFirstChildOfClass("Humanoid")
-	end
-end
-
-local function startSpectate(p)
-	if spectating and spectateTarget==p then
-		stopSpectate()
-		return
-	end
-	spectateTarget=p
-	spectating=true
-	if p.Character and p.Character:FindFirstChild("Humanoid") then
-		camera.CameraSubject=p.Character:FindFirstChildOfClass("Humanoid")
-	end
-end
-
-local function clearSpectateButtons()
-	for _,b in pairs(spectateButtons) do
-		b:Destroy()
-	end
-	spectateButtons={}
-end
-
-local function buildSpectateList()
-	clearSpectateButtons()
-	local y=565
-	for _,p in pairs(Players:GetPlayers()) do
-		if p~=player then
-			local b=Instance.new("TextButton")
-			b.Parent=frame
-			b.Size=UDim2.new(1,-10,0,25)
-			b.Position=UDim2.new(0,5,0,y)
-			b.Text=p.Name
-			b.BackgroundColor3=Color3.fromRGB(45,45,45)
-			b.TextColor3=Color3.new(1,1,1)
-			b.MouseButton1Click:Connect(function()
-				startSpectate(p)
-			end)
-			table.insert(spectateButtons,b)
-			y+=25
-		end
-	end
-end
-
-spectateButton.MouseButton1Click:Connect(function()
-	spectateOpen=not spectateOpen
-	if spectateOpen then
-		spectateButton.Text="Spectate Players ▲"
-		buildSpectateList()
-	else
-		spectateButton.Text="Spectate Players ▼"
-		clearSpectateButtons()
-	end
-end)
-
--- hotkeys
-UIS.InputBegan:Connect(function(input,processed)
-	if processed then return end
-	if input.KeyCode==Enum.KeyCode.Z then flying=not flying end
-	if input.KeyCode==Enum.KeyCode.X then noclip=not noclip end
-	if input.KeyCode==Enum.KeyCode.T then teleportMouse() end
-	if input.KeyCode==Enum.KeyCode.E then playerESP=not playerESP end
-	if input.KeyCode==Enum.KeyCode.R then npcESP=not npcESP end
-	if input.KeyCode==Enum.KeyCode.Y then itemESP=not itemESP end
-	if input.KeyCode==Enum.KeyCode.C then autoClimb=not autoClimb end
-	if input.KeyCode==Enum.KeyCode.V then
-		local char=getChar()
-		local hum=char:FindFirstChildOfClass("Humanoid")
-		if hum then walkSpeedValue+=5 hum.WalkSpeed=walkSpeedValue end
-	end
-	if input.KeyCode==Enum.KeyCode.B then
-		local char=getChar()
-		local hum=char:FindFirstChildOfClass("Humanoid")
-		if hum then walkSpeedValue=16 hum.WalkSpeed=16 end
-	end
-	if input.KeyCode==Enum.KeyCode.U then artifactESP=not artifactESP end
-	if input.KeyCode==Enum.KeyCode.I then trinketESP=not trinketESP end
-	if input.KeyCode==Enum.KeyCode.P then
-		if attachBack then attachBack=false attachTarget=nil
-		else
-			if spectateTarget and spectateTarget.Character then
-				attachTarget=spectateTarget
-				attachBack=true
-			end
-		end
-	end
-end)
-
--- main loop
-RunService.RenderStepped:Connect(function()
-	local char=getChar()
 	local root=char:FindFirstChild("HumanoidRootPart")
-	local humanoid=char:FindFirstChildOfClass("Humanoid")
-	if not root or not humanoid then return end
+	if not root then return end
 
-	if noclip then
+	bv=Instance.new("BodyVelocity",root)
+	bv.MaxForce=Vector3.new(9e9,9e9,9e9)
+
+	bg=Instance.new("BodyGyro",root)
+	bg.MaxTorque=Vector3.new(9e9,9e9,9e9)
+
+	RunService.RenderStepped:Connect(function()
+
+		if not flying then return end
+
+		local cam=workspace.CurrentCamera
+		local dir=Vector3.new()
+
+		if UIS:IsKeyDown(Enum.KeyCode.W) then
+			dir=dir+cam.CFrame.LookVector
+		end
+
+		if UIS:IsKeyDown(Enum.KeyCode.S) then
+			dir=dir-cam.CFrame.LookVector
+		end
+
+		if UIS:IsKeyDown(Enum.KeyCode.A) then
+			dir=dir-cam.CFrame.RightVector
+		end
+
+		if UIS:IsKeyDown(Enum.KeyCode.D) then
+			dir=dir+cam.CFrame.RightVector
+		end
+
+		bv.Velocity=dir*flySpeed
+		bg.CFrame=cam.CFrame
+
+	end)
+
+end
+
+function stopFly()
+
+	if bv then bv:Destroy() end
+	if bg then bg:Destroy() end
+
+end
+
+-- NOCLIP LOOP
+
+RunService.Stepped:Connect(function()
+
+	if noclip and char then
+
 		for _,v in pairs(char:GetDescendants()) do
-			if v:IsA("BasePart") then v.CanCollide=false end
-		end
-	end
 
-	if autoClimb then humanoid.Jump=true end
-
-	if playerESP then
-		for _,p in pairs(Players:GetPlayers()) do
-			if p~=player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-				createESP(p.Character.HumanoidRootPart,p.Name,Color3.new(1,0,0))
+			if v:IsA("BasePart") then
+				v.CanCollide=false
 			end
+
 		end
+
 	end
 
-	if npcESP then
-		for _,v in pairs(Workspace:GetDescendants()) do
-			if v:FindFirstChild("Humanoid") and not Players:GetPlayerFromCharacter(v) then
-				local r=v:FindFirstChild("HumanoidRootPart")
-				if r then createESP(r,"NPC",Color3.new(0,1,0)) end
-			end
+end)
+
+-- ATTACH LOOP
+
+RunService.RenderStepped:Connect(function()
+
+	if attachBack and spectateTarget and spectateTarget.Character then
+
+		local root=char:FindFirstChild("HumanoidRootPart")
+		local targetRoot=spectateTarget.Character:FindFirstChild("HumanoidRootPart")
+
+		if root and targetRoot then
+			root.CFrame=targetRoot.CFrame*CFrame.new(0,0,2)
 		end
+
 	end
 
-	if itemESP then
-		for _,v in pairs(Workspace:GetDescendants()) do
-			if v:IsA("Tool") then
-				local h=v:FindFirstChild("Handle")
-				if h then createESP(h,"Item",Color3.new(1,1,0)) end
-			end
-		end
-	end
+end)
 
-	if artifactESP then
-		for _,v in pairs(Workspace:GetDescendants()) do
-			if v:IsA("Tool") and string.find(string.lower(v.Name),"artifact") then
-				local h=v:FindFirstChild("Handle")
-				if h then createESP(h,"Artifact",Color3.fromRGB(0,255,255)) end
-			end
-		end
-	end
+-- BUTTONS
 
-	if trinketESP then
-		for _,v in pairs(Workspace:GetDescendants()) do
-			if v:IsA("Tool") and not string.find(string.lower(v.Name),"artifact") then
-				local h=v:FindFirstChild("Handle")
-				if h then createESP(h,"Trinket",Color3.fromRGB(255,255,0)) end
-			end
-		end
-	end
+makeButton("Fly (Y)",function()
+
+	flying=not flying
 
 	if flying then
-		if not bv then
-			bv=Instance.new("BodyVelocity")
-			bv.MaxForce=Vector3.new(1e5,1e5,1e5)
-			bv.Parent=root
-		end
-		if not bg then
-			bg=Instance.new("BodyGyro")
-			bg.MaxTorque=Vector3.new(1e5,1e5,1e5)
-			bg.P=1e4
-			bg.Parent=root
-		end
-		local moveDir=humanoid.MoveDirection
-		local camCF=camera.CFrame
-		local vel=(camCF.LookVector*moveDir.Z+camCF.RightVector*moveDir.X)
-		if UIS:IsKeyDown(Enum.KeyCode.Space) then vel+=Vector3.new(0,1,0) end
-		if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then vel-=Vector3.new(0,1,0) end
-		bv.Velocity=vel*speed
-		bg.CFrame=camCF
+		startFly()
 	else
-		if bv then bv:Destroy() bv=nil end
-		if bg then bg:Destroy() bg=nil end
+		stopFly()
 	end
 
-	-- attach to back
-	if attachBack and attachTarget and attachTarget.Character then
-		local targetRoot=attachTarget.Character:FindFirstChild("HumanoidRootPart")
-		if targetRoot then
-			root.CFrame=targetRoot.CFrame * CFrame.new(0,0,2)
+end)
+
+makeButton("NoClip",function()
+	noclip=not noclip
+end)
+
+makeButton("Teleport To Mouse (T)",function()
+	teleportToMouse()
+end)
+
+makeButton("WalkSpeed + (V)",function()
+
+	local hum=char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		hum.WalkSpeed=hum.WalkSpeed+10
+	end
+
+end)
+
+makeButton("Reset WalkSpeed (B)",function()
+
+	local hum=char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		hum.WalkSpeed=16
+	end
+
+end)
+
+makeButton("Attach To Back (P)",function()
+
+	if spectateTarget then
+		attachBack=not attachBack
+	end
+
+end)
+
+-- SPECTATE MENU
+
+local spectateFrame=Instance.new("Frame",frame)
+spectateFrame.Size=UDim2.new(1,-10,0,120)
+spectateFrame.Position=UDim2.new(0,5,1,-130)
+spectateFrame.BackgroundColor3=Color3.fromRGB(30,30,30)
+
+local layout=Instance.new("UIListLayout",spectateFrame)
+
+function refreshSpectate()
+
+	for _,v in pairs(spectateFrame:GetChildren()) do
+		if v:IsA("TextButton") then
+			v:Destroy()
 		end
 	end
+
+	for _,plr in pairs(Players:GetPlayers()) do
+
+		if plr~=player then
+
+			local b=Instance.new("TextButton",spectateFrame)
+
+			b.Size=UDim2.new(1,0,0,25)
+			b.Text=plr.Name
+			b.BackgroundColor3=Color3.fromRGB(40,40,40)
+			b.TextColor3=Color3.new(1,1,1)
+
+			b.MouseButton1Click:Connect(function()
+
+				if spectateTarget==plr then
+
+					spectateTarget=nil
+					workspace.CurrentCamera.CameraSubject=char:FindFirstChildOfClass("Humanoid")
+
+				else
+
+					spectateTarget=plr
+
+					if plr.Character then
+						workspace.CurrentCamera.CameraSubject=plr.Character:FindFirstChildOfClass("Humanoid")
+					end
+
+				end
+
+			end)
+
+		end
+
+	end
+
+end
+
+Players.PlayerAdded:Connect(refreshSpectate)
+Players.PlayerRemoving:Connect(refreshSpectate)
+
+refreshSpectate()
+
+-- HOTKEYS
+
+UIS.InputBegan:Connect(function(input,gp)
+
+	if gp then return end
+
+	if input.KeyCode==Enum.KeyCode.Y then
+
+		flying=not flying
+
+		if flying then
+			startFly()
+		else
+			stopFly()
+		end
+
+	end
+
+	if input.KeyCode==Enum.KeyCode.T then
+		teleportToMouse()
+	end
+
+	if input.KeyCode==Enum.KeyCode.V then
+
+		local hum=char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			hum.WalkSpeed=hum.WalkSpeed+10
+		end
+
+	end
+
+	if input.KeyCode==Enum.KeyCode.B then
+
+		local hum=char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			hum.WalkSpeed=16
+		end
+
+	end
+
+	if input.KeyCode==Enum.KeyCode.P then
+
+		if spectateTarget then
+			attachBack=not attachBack
+		end
+
+	end
+
 end)
