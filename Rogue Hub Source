@@ -31,6 +31,9 @@ frame.Size=UDim2.new(0,260,0,420)
 frame.Position=UDim2.new(0,20,0.5,-200)
 frame.BackgroundColor3=Color3.fromRGB(25,25,25)
 
+frame.Active=true
+frame.Draggable=true
+
 local title=Instance.new("TextLabel",frame)
 title.Size=UDim2.new(1,0,0,30)
 title.Text="Rogue Utility Hub"
@@ -131,11 +134,9 @@ RunService.Stepped:Connect(function()
 	if noclip and char then
 
 		for _,v in pairs(char:GetDescendants()) do
-
 			if v:IsA("BasePart") then
 				v.CanCollide=false
 			end
-
 		end
 
 	end
@@ -173,7 +174,7 @@ makeButton("Fly (Y)",function()
 
 end)
 
-makeButton("NoClip",function()
+makeButton("NoClip (N)",function()
 	noclip=not noclip
 end)
 
@@ -272,15 +273,12 @@ UIS.InputBegan:Connect(function(input,gp)
 	if gp then return end
 
 	if input.KeyCode==Enum.KeyCode.Y then
-
 		flying=not flying
+		if flying then startFly() else stopFly() end
+	end
 
-		if flying then
-			startFly()
-		else
-			stopFly()
-		end
-
+	if input.KeyCode==Enum.KeyCode.N then
+		noclip=not noclip
 	end
 
 	if input.KeyCode==Enum.KeyCode.T then
@@ -288,29 +286,19 @@ UIS.InputBegan:Connect(function(input,gp)
 	end
 
 	if input.KeyCode==Enum.KeyCode.V then
-
 		local hum=char:FindFirstChildOfClass("Humanoid")
-		if hum then
-			hum.WalkSpeed=hum.WalkSpeed+10
-		end
-
+		if hum then hum.WalkSpeed=hum.WalkSpeed+10 end
 	end
 
 	if input.KeyCode==Enum.KeyCode.B then
-
 		local hum=char:FindFirstChildOfClass("Humanoid")
-		if hum then
-			hum.WalkSpeed=16
-		end
-
+		if hum then hum.WalkSpeed=16 end
 	end
 
 	if input.KeyCode==Enum.KeyCode.P then
-
 		if spectateTarget then
 			attachBack=not attachBack
 		end
-
 	end
 
 end)
