@@ -1,4 +1,4 @@
--- Rogue Utility Hub
+-- Rogue Utility Hub (Final Fly Fix)
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
@@ -13,7 +13,9 @@ player.CharacterAdded:Connect(function(c)
 	char = c
 end)
 
+-------------------------------------------------
 -- STATES
+-------------------------------------------------
 
 local flying=false
 local noclip=false
@@ -21,13 +23,19 @@ local spectateTarget=nil
 local attachBack=false
 local flySpeed=80
 
+local bv
+local bg
+local flyConnection
+
+-------------------------------------------------
 -- GUI
+-------------------------------------------------
 
 local gui=Instance.new("ScreenGui",game.CoreGui)
 gui.Name="RogueHub"
 
 local frame=Instance.new("Frame",gui)
-frame.Size=UDim2.new(0,260,0,420)
+frame.Size=UDim2.new(0,260,0,450)
 frame.Position=UDim2.new(0,20,0.5,-200)
 frame.BackgroundColor3=Color3.fromRGB(25,25,25)
 
@@ -40,7 +48,9 @@ title.Text="Rogue Utility Hub"
 title.BackgroundTransparency=1
 title.TextColor3=Color3.new(1,1,1)
 
+-------------------------------------------------
 -- BUTTON CREATOR
+-------------------------------------------------
 
 local y=40
 
@@ -49,6 +59,7 @@ function makeButton(text,callback)
 	local b=Instance.new("TextButton",frame)
 	b.Size=UDim2.new(1,-10,0,30)
 	b.Position=UDim2.new(0,5,0,y)
+
 	b.Text=text
 	b.BackgroundColor3=Color3.fromRGB(40,40,40)
 	b.TextColor3=Color3.new(1,1,1)
@@ -59,75 +70,99 @@ function makeButton(text,callback)
 
 end
 
+-------------------------------------------------
 -- TELEPORT
+-------------------------------------------------
 
 local function teleportToMouse()
 
-	if not char then return end
-
 	local root=char:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 
-	local pos=mouse.Hit.Position
-
-	root.CFrame=CFrame.new(pos+Vector3.new(0,5,0))
+	root.CFrame=CFrame.new(mouse.Hit.Position+Vector3.new(0,5,0))
 
 end
 
--- FLY
+-------------------------------------------------
+-- FIXED FLY SYSTEM
+-------------------------------------------------
 
-local bv
-local bg
-
-function startFly()
+local function startFly()
 
 	local root=char:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 
-	bv=Instance.new("BodyVelocity",root)
+	bv=Instance.new("BodyVelocity")
 	bv.MaxForce=Vector3.new(9e9,9e9,9e9)
+	bv.Parent=root
 
-	bg=Instance.new("BodyGyro",root)
+	bg=Instance.new("BodyGyro")
 	bg.MaxTorque=Vector3.new(9e9,9e9,9e9)
+	bg.P=10000
+	bg.Parent=root
 
-	RunService.RenderStepped:Connect(function()
+	flyConnection=RunService.RenderStepped:Connect(function()
 
 		if not flying then return end
 
 		local cam=workspace.CurrentCamera
-		local dir=Vector3.new()
+		local dir=Vector3.zero
 
 		if UIS:IsKeyDown(Enum.KeyCode.W) then
-			dir=dir+cam.CFrame.LookVector
+			dir+=cam.CFrame.LookVector
 		end
 
 		if UIS:IsKeyDown(Enum.KeyCode.S) then
-			dir=dir-cam.CFrame.LookVector
+			dir-=cam.CFrame.LookVector
 		end
 
 		if UIS:IsKeyDown(Enum.KeyCode.A) then
-			dir=dir-cam.CFrame.RightVector
+			dir-=cam.CFrame.RightVector
 		end
 
 		if UIS:IsKeyDown(Enum.KeyCode.D) then
-			dir=dir+cam.CFrame.RightVector
+			dir+=cam.CFrame.RightVector
 		end
 
-		bv.Velocity=dir*flySpeed
-		bg.CFrame=cam.CFrame
+		-- Normalize so flySpeed works correctly
+		if dir.Magnitude > 0 then
+			dir = dir.Unit
+		end
+
+		bv.Velocity = dir * flySpeed
+		bg.CFrame = cam.CFrame
 
 	end)
 
 end
 
-function stopFly()
+local function stopFly()
+
+	if flyConnection then
+		flyConnection:Disconnect()
+		flyConnection=nil
+	end
 
 	if bv then bv:Destroy() end
 	if bg then bg:Destroy() end
 
 end
 
--- NOCLIP LOOP
+local function toggleFly()
+
+	flying=not flying
+
+	if flying then
+		startFly()
+	else
+		stopFly()
+	end
+
+end
+
+-------------------------------------------------
+-- NOCLIP
+-------------------------------------------------
 
 RunService.Stepped:Connect(function()
 
@@ -143,7 +178,9 @@ RunService.Stepped:Connect(function()
 
 end)
 
--- ATTACH LOOP
+-------------------------------------------------
+-- ATTACH TO PLAYER
+-------------------------------------------------
 
 RunService.RenderStepped:Connect(function()
 
@@ -160,26 +197,26 @@ RunService.RenderStepped:Connect(function()
 
 end)
 
+-------------------------------------------------
 -- BUTTONS
+-------------------------------------------------
 
-makeButton("Fly (Y)",function()
-
-	flying=not flying
-
-	if flying then
-		startFly()
-	else
-		stopFly()
-	end
-
-end)
+makeButton("Fly (Y)",toggleFly)
 
 makeButton("NoClip (N)",function()
 	noclip=not noclip
 end)
 
-makeButton("Teleport To Mouse (T)",function()
-	teleportToMouse()
+makeButton("Teleport To Mouse (T)",teleportToMouse)
+
+makeButton("Increase Fly Speed (U)",function()
+	flySpeed=flySpeed+10
+	print("Fly Speed:",flySpeed)
+end)
+
+makeButton("Decrease Fly Speed (J)",function()
+	flySpeed=math.max(10,flySpeed-10)
+	print("Fly Speed:",flySpeed)
 end)
 
 makeButton("WalkSpeed + (V)",function()
@@ -208,7 +245,9 @@ makeButton("Attach To Back (P)",function()
 
 end)
 
+-------------------------------------------------
 -- SPECTATE MENU
+-------------------------------------------------
 
 local spectateFrame=Instance.new("Frame",frame)
 spectateFrame.Size=UDim2.new(1,-10,0,120)
@@ -220,9 +259,7 @@ local layout=Instance.new("UIListLayout",spectateFrame)
 function refreshSpectate()
 
 	for _,v in pairs(spectateFrame:GetChildren()) do
-		if v:IsA("TextButton") then
-			v:Destroy()
-		end
+		if v:IsA("TextButton") then v:Destroy() end
 	end
 
 	for _,plr in pairs(Players:GetPlayers()) do
@@ -239,18 +276,13 @@ function refreshSpectate()
 			b.MouseButton1Click:Connect(function()
 
 				if spectateTarget==plr then
-
 					spectateTarget=nil
 					workspace.CurrentCamera.CameraSubject=char:FindFirstChildOfClass("Humanoid")
-
 				else
-
 					spectateTarget=plr
-
 					if plr.Character then
 						workspace.CurrentCamera.CameraSubject=plr.Character:FindFirstChildOfClass("Humanoid")
 					end
-
 				end
 
 			end)
@@ -266,15 +298,16 @@ Players.PlayerRemoving:Connect(refreshSpectate)
 
 refreshSpectate()
 
+-------------------------------------------------
 -- HOTKEYS
+-------------------------------------------------
 
 UIS.InputBegan:Connect(function(input,gp)
 
 	if gp then return end
 
 	if input.KeyCode==Enum.KeyCode.Y then
-		flying=not flying
-		if flying then startFly() else stopFly() end
+		toggleFly()
 	end
 
 	if input.KeyCode==Enum.KeyCode.N then
@@ -283,6 +316,14 @@ UIS.InputBegan:Connect(function(input,gp)
 
 	if input.KeyCode==Enum.KeyCode.T then
 		teleportToMouse()
+	end
+
+	if input.KeyCode==Enum.KeyCode.U then
+		flySpeed=flySpeed+10
+	end
+
+	if input.KeyCode==Enum.KeyCode.J then
+		flySpeed=math.max(10,flySpeed-10)
 	end
 
 	if input.KeyCode==Enum.KeyCode.V then
